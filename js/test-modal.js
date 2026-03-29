@@ -97,7 +97,7 @@ async function openTestModal() {
     window.addEventListener('message', _messageHandler);
 
     // Navigate the iframe — this creates a completely fresh JS/WASM context.
-    frame.src = '/test-player.html';
+    frame.src = './test-player.html';
 
     // Focus the frame
     setTimeout(() => frame.contentWindow.focus(), 100);
