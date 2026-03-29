@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 480px; height: 432px; overflow: hidden; background: #000; }
+    /* Canvas is native GB resolution (160×144); CSS scales it to 3× (480×432).
+       image-rendering: pixelated keeps sharp pixels without blurring. */
+    canvas {
+      display: block;
+      width:  480px;
+      height: 432px;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+    }
+
+  </style>
+</head>
+<body>
+  <!-- Native GB resolution: 160×144. CSS (above) scales to 3× = 480×432. -->
+  <canvas id="player-canvas" width="160" height="144"></canvas>
+  <div id="status">Waiting for ROM…</div>
+
+  <!-- WASMBoy — self-contained UMD bundle (workers + WASM are base64-inlined) -->
+  <script src="/lib/wasmboy/wasmboy.wasm.umd.js"
+          onerror="document.getElementById('status').textContent='❌ WASMBoy not found — run: node setup-wasmboy.js'">
+  </script>
+
+  <script>
+    'use strict';
+
+    const canvas = document.getElementById('player-canvas');
+    const statusEl = document.getElementById('status');
+
+    function setStatus(msg) {
+      statusEl.textContent = msg;
+      window.parent.postMessage({ type: 'STATUS', message: msg }, '*');
+    }
+
+    // ---- State deserialiser ------------------------------------------------------
+    // Handles: { __b64: true, data: "..." }  (new format)
+    //          { "0": 1, "1": 2, ... }        (old numeric-key format)
+    function deserialize(val) {
+      if (val && typeof val === 'object' && val.__b64) {
+        const bin = atob(val.data);
+        const arr = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+        return arr;
+      }
+      if (Array.isArray(val)) return val.map(deserialize);
+      if (val && typeof val === 'object') {
+        const keys = Object.keys(val);
+        if (keys.length > 0 && keys.every(k => /^\d+$/.test(k))) {
+          const arr = new Uint8Array(keys.length);
+          for (let i = 0; i < keys.length; i++) arr[i] = val[i] ?? 0;
+          return arr;
+        }
+        const out = {};
+        for (const [k, v] of Object.entries(val)) out[k] = deserialize(v);
+        return out;
+      }
+      return val;
+    }
+
+    // ---- State serialiser --------------------------------------------------------
+    function serialize(val) {
+      if (val instanceof Uint8Array) {
+        let bin = '';
+        for (let i = 0; i < val.length; i++) bin += String.fromCharCode(val[i]);
+        return { __b64: true, data: btoa(bin) };
+      }
+      if (Array.isArray(val)) return val.map(serialize);
+      if (val && typeof val === 'object') {
+        const out = {};
+        for (const [k, v] of Object.entries(val)) out[k] = serialize(v);
+        return out;
+      }
+      return val;
+    }
+
+    // ---- Message handler ---------------------------------------------------------
+    window.addEventListener('message', async (e) => {
+      if (e.data.type === 'INIT') {
+        try {
+          const WasmBoy = window.WasmBoy.WasmBoy;
+
+          setStatus('Configuring emulator…');
+          await WasmBoy.config({
+            headless:               false,
+            isGbcEnabled:           false,
+            audioBatchProcessing:   false,
+            audioAccumulateSamples: false,
+            gameboySpeed:           1.0,
+          }, canvas);
+
+          setStatus('Loading ROM…');
+          await WasmBoy.loadROM(new Uint8Array(e.data.rom));
+
+          if (e.data.stateJson) {
+            setStatus('Restoring save state…');
+            const state = deserialize(JSON.parse(e.data.stateJson));
+            await WasmBoy.loadState(state);
+            // One rAF so the audio worker flushes its sample buffer
+            // before play() reopens the AudioContext — avoids post-load screech.
+            await new Promise(r => requestAnimationFrame(r));
+
+            // Click the A button. Spawn the load level routine
+            WasmBoy.setJoypadState({ A: true })
+          }
+
+          setStatus('▶ Running');
+          await WasmBoy.play();
+
+          try { WasmBoy.ResponsiveGamepad.enable(); } catch (_) {}
+          canvas.focus();
+
+          window.parent.postMessage({ type: 'READY' }, '*');
+
+        } catch (err) {
+          setStatus('❌ ' + err.message);
+          console.error('[Player]', err);
+          window.parent.postMessage({ type: 'ERROR', message: err.message }, '*');
+        }
+
+      } else if (e.data.type === 'SAVE_STATE') {
+        try {
+          const WasmBoy = window.WasmBoy.WasmBoy;
+          const state = await WasmBoy.saveState();
+          const json  = JSON.stringify(serialize(state));
+          const blob  = new Blob([json], { type: 'application/json' });
+          const url   = URL.createObjectURL(blob);
+          const a     = Object.assign(document.createElement('a'),
+                          { href: url, download: 'teststate.json' });
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+          window.parent.postMessage({ type: 'STATE_SAVED' }, '*');
+        } catch (err) {
+          window.parent.postMessage({ type: 'SAVE_ERROR', message: err.message }, '*');
+        }
+      }
+    });
+
+    // Tell parent we're alive and ready to receive INIT
+    window.parent.postMessage({ type: 'PLAYER_LOADED' }, '*');
+  </script>
+</body>
+</html>

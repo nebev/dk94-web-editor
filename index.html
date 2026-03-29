@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DK '94 Web Level Editor</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <!-- ================================================================
+       TOOLBAR
+       ================================================================ -->
+  <div class="toolbar">
+
+    <!-- File operations -->
+    <div class="toolbar-group">
+      <button id="btn-load-rom" title="Load a .gb ROM file">Load ROM</button>
+      <button id="btn-save-rom" title="Export modified ROM as .gb" disabled>Save ROM</button>
+      <input type="file" id="file-rom" accept=".gb,.gbc,.bin" style="display:none">
+    </div>
+
+    <!-- Level file import/export -->
+    <div class="toolbar-group">
+      <button id="btn-export-lvl" title="Export current level as .lvl file" disabled>Export .lvl</button>
+      <button id="btn-import-lvl" title="Import .lvl file into current level" disabled>Import .lvl</button>
+      <input type="file" id="file-lvl-import" accept=".lvl" style="display:none">
+    </div>
+
+    <!-- Level navigation -->
+    <div class="toolbar-group">
+      <label>Level
+        <input type="number" id="level-num" min="0" max="104" value="0" disabled>
+      </label>
+      <button id="btn-save-level" title="Commit level changes" disabled>Apply</button>
+    </div>
+
+    <!-- Edit operations -->
+    <div class="toolbar-group">
+      <button id="btn-undo" title="Undo last tile/sprite/switch edit (Ctrl+Z)" disabled>Undo</button>
+      <button id="btn-clear" title="Clear all tiles, sprites and switches" disabled>Clear</button>
+    </div>
+
+    <!-- Zoom -->
+    <div class="toolbar-group">
+      <label>Zoom
+        <input type="number" id="zoom-level" min="1" max="4" value="2" disabled>
+      </label>
+    </div>
+
+    <!-- Test -->
+    <div class="toolbar-group">
+      <button id="btn-test-level" title="Test current level in WASMBoy emulator" disabled>Test Level ▶</button>
+    </div>
+
+  </div><!-- /.toolbar -->
+
+
+  <!-- ================================================================
+       MAIN LAYOUT
+       ================================================================ -->
+  <div class="main-layout">
+
+    <!-- ---- Left: editor canvas ---- -->
+    <div class="editor-area">
+
+      <div id="drop-zone">
+        <canvas id="level-canvas"></canvas>
+      </div>
+
+      <div class="level-info-bar" id="level-info">
+        Drop a Donkey Kong '94 ROM (.gb) here to begin.
+      </div>
+
+    </div><!-- /.editor-area -->
+
+
+    <!-- ---- Right: side panel ---- -->
+    <div class="side-panel">
+
+      <!-- Tab buttons -->
+      <div class="tabs">
+        <button class="tab-btn active" data-tab="tiles">Tiles</button>
+        <button class="tab-btn"        data-tab="sprites">Sprites</button>
+        <button class="tab-btn"        data-tab="switches">Switches</button>
+      </div>
+
+      <!-- ---- TILES TAB ---- -->
+      <div class="tab-content active" id="tab-tiles">
+        <div class="tile-canvas-wrapper">
+          <canvas id="tile-canvas"></canvas>
+        </div>
+        <div id="tile-hover-info"></div>
+      </div>
+
+      <!-- ---- SPRITES TAB ---- -->
+      <div class="tab-content" id="tab-sprites">
+
+        <!-- Add-sprite row -->
+        <div class="sprite-add-row">
+          <button id="btn-add-sprite" style="width:100%" disabled>New Sprite…</button>
+        </div>
+
+        <!-- Sprite list -->
+        <div class="sprite-list-wrapper">
+          <ul id="sprite-list"></ul>
+        </div>
+
+        <!-- Sprite properties (shown when a sprite is selected) -->
+        <div id="sprite-props-container">
+          <h4>Sprite Properties</h4>
+
+          <!-- Direction / flip toggle — shown for Mario, friends, platforms, boards -->
+          <div class="prop-row" id="prop-flip">
+            <label>Direction</label>
+            <button id="btn-flip">Facing Right</button>
+          </div>
+
+          <!-- Speed — shown for wall-walking enemies / floating platforms -->
+          <div class="prop-row" id="prop-speed">
+            <label>Speed</label>
+            <input type="number" id="spb-speed" min="0" max="127">
+          </div>
+
+          <!-- Elevator variant — shown for elevator sprites (0x70, 0x72) -->
+          <div class="prop-row" id="prop-elevator">
+            <label>Type</label>
+            <select id="cmb-elevator">
+              <option value="0">Type 0</option><option value="1">Type 1</option>
+              <option value="2">Type 2</option><option value="3">Type 3</option>
+              <option value="4">Type 4</option><option value="5">Type 5</option>
+              <option value="6">Type 6</option><option value="7">Type 7</option>
+              <option value="8">Type 8</option><option value="9">Type 9</option>
+              <option value="10">Type 10</option><option value="11">Type 11</option>
+              <option value="12">Type 12</option><option value="13">Type 13</option>
+              <option value="14">Type 14</option><option value="15">Type 15</option>
+            </select>
+          </div>
+
+          <!-- Raw flag byte — shown for key/oil-can/DK/avalanche sprites -->
+          <div class="prop-row" id="prop-raw">
+            <label>Flag (0–255)</label>
+            <input type="number" id="spb-raw" min="0" max="255">
+          </div>
+
+          <!-- Delete -->
+          <div class="prop-row">
+            <button id="btn-delete-sprite" style="color:#f88">Delete Sprite</button>
+          </div>
+        </div><!-- /#sprite-props-container -->
+
+      </div><!-- /#tab-sprites -->
+
+
+      <!-- ---- SWITCHES TAB ---- -->
+      <div class="tab-content" id="tab-switches">
+        <div class="switch-list">
+          <p class="hint">
+            Click the canvas to place a switch (while in Switch mode).<br>
+            Then click objects to link them to the active switch.
+          </p>
+          <div id="switch-list"></div>
+        </div>
+      </div><!-- /#tab-switches -->
+
+
+      <!-- ---- LEVEL PROPERTIES (always visible at bottom) ---- -->
+      <div class="level-props">
+        <h4>Level Properties</h4>
+
+        <div class="props-grid">
+
+          <label>Size
+            <select id="cmb-size" disabled>
+              <option value="0">10×8 (small)</option>
+              <option value="1">16×8</option>
+              <option value="2">20×8</option>
+              <option value="3">32×8</option>
+              <option value="4">10×16</option>
+              <option value="5">16×16</option>
+              <option value="6">20×16</option>
+              <option value="7">32×16</option>
+            </select>
+          </label>
+
+          <label>Time (s)
+            <input type="number" id="spb-time" min="0" max="255" disabled>
+          </label>
+
+          <label>Music
+            <select id="cmb-music" disabled></select>
+          </label>
+
+          <label>Tileset
+            <select id="cmb-tileset" disabled></select>
+          </label>
+
+          <label>Palette
+            <input type="number" id="spb-palette" min="0" max="511" disabled>
+          </label>
+
+          <label class="full-width" style="flex-direction:row;align-items:center;gap:6px">
+            <input type="checkbox" id="ckb-transparent" disabled>
+            Transparent BG
+          </label>
+
+          <!-- VRAM usage bars -->
+          <div class="vram-section">
+
+            <div class="vram-row">
+              <span>Tile GFX</span>
+              <div class="vram-bar-track">
+                <div class="vram-bar" id="vram-tiles-bar"></div>
+              </div>
+              <span class="vram-label" id="vram-tiles-text">0 / 80</span>
+            </div>
+
+            <div class="vram-row">
+              <span>Sprite GFX</span>
+              <div class="vram-bar-track">
+                <div class="vram-bar" id="vram-sprites-bar"></div>
+              </div>
+              <span class="vram-label" id="vram-sprites-text">0 / 256</span>
+            </div>
+
+          </div><!-- /.vram-section -->
+
+        </div><!-- /.props-grid -->
+      </div><!-- /.level-props -->
+
+    </div><!-- /.side-panel -->
+
+  </div><!-- /.main-layout -->
+
+
+  <!-- ================================================================
+       TEST LEVEL MODAL  (WASMBoy)
+       ================================================================ -->
+  <div id="test-modal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true">
+    <div class="modal-box test-modal-box">
+
+      <div class="modal-header">
+        <span>Test Level  <small style="color:#888;font-size:11px"></small></span>
+        <button id="btn-close-test" title="Close">✕</button>
+      </div>
+
+      <!-- Game Boy screen — loaded into an isolated iframe so each test
+           session gets a completely fresh JS/WASM/Worker environment. -->
+      <iframe id="test-frame" src="about:blank"
+              width="480" height="432"
+              frameborder="0" scrolling="no"
+              style="display:block;background:#000"></iframe>
+
+      <p id="test-status" class="test-status">Initialising…</p>
+
+      <div class="test-footer">
+        <div class="test-keys">
+          <span>Arrow keys · D-pad</span>
+          <span>X = A &nbsp;&nbsp; Z = B</span>
+          <span>Enter = Start &nbsp;&nbsp; Shift = Select</span>
+        </div>
+        <button id="btn-dl-savestate" class="btn-dl-savestate">⬇ Save State</button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ================================================================
+       SPRITE ADD MODAL
+       ================================================================ -->
+  <div id="sprite-modal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true">
+    <div class="modal-box">
+      <div class="modal-header">
+        <span>Add Sprite</span>
+        <button id="btn-sprite-modal-close" title="Close">✕</button>
+      </div>
+      <div id="sprite-modal-grid" class="sprite-modal-grid">
+        <!-- Populated by JS when modal opens -->
+      </div>
+    </div>
+  </div>
+
+  <!-- ================================================================
+       SCRIPTS  (load order matters — each file depends on the previous)
+       ================================================================ -->
+  <script src="js/constants.js"></script>
+  <script src="js/lzss.js"></script>
+  <script src="js/rom-parser.js"></script>
+  <script src="js/renderer.js"></script>
+  <script src="js/editor.js"></script>
+  <script src="js/app.js"></script>
+  <!-- WASMBoy is loaded only inside test-player.html (the test iframe),
+       not in the main page, so it never pollutes the editor's global scope. -->
+  <script src="js/test-modal.js"></script>
+
+</body>
+</html>

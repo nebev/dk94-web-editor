@@ -1,0 +1,13 @@
+{
+  "name": "dk-web",
+  "version": "1.0.0",
+  "description": "DK '94 Web Level Editor",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "setup": "node setup-wasmboy.js"
+  },
+  "engines": {
+    "node": ">=14"
+  }
+}
