@@ -57,7 +57,7 @@ async function openTestModal() {
     // have a fresh copy.  This is the state the iframe will restore.
     let stateJson = null;
     try {
-      const res = await fetch('/saves/teststate.json');
+      const res = await fetch('saves/teststate.json');
       if (res.ok) stateJson = await res.text();
     } catch (_) { /* no state yet — player will boot from scratch */ }
 
