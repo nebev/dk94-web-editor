@@ -2,7 +2,9 @@
 
 This is a simple web-based port of the hard work done by [bailli](https://github.com/bailli), who built the fantastic C++/QT version of the [Donkey Kong '94 Level Editor](https://github.com/bailli/eDKit).
 
-[Main Interface](./docs/main-interface.png)
+![Main Interface](./docs/main-interface.png)
+
+[Try it out](https://nebev.github.io/dk94-web-editor)
 
 The main reason for doing this was to make it easier for people without too much computer experience to be able to edit the levels of Donkey Kong '94, and to make it more accessible to people on different platforms. I also had some issues running it on Windows, with palettes being incorrect. The web version also contains a feature to test levels in the browser. This is done using [Wasmboy](https://wasmboy.app/).
 
